@@ -208,7 +208,7 @@ GuiMenu::GuiMenu(Window *window, bool animate) : GuiComponent(window), mMenu(win
 	}
 
 #ifdef AI
-	addEntry(_("AI").c_str(), true, [this] { openBatoceraStore(); }, "iconGames");
+	addEntry(_("AI").c_str(), true, [this] { openQuitMenu(); }, "iconGames");
 #endif
 
 #ifdef WIN32
