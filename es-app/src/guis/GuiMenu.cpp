@@ -59,6 +59,7 @@
 #include "Gamelist.h"
 #include "TextToSpeech.h"
 #include "Paths.h"
+#include "guis/GuiAiGraphics.h"
 
 #if WIN32
 #include "Win32ApiSystem.h"
@@ -205,6 +206,8 @@ GuiMenu::GuiMenu(Window *window, bool animate) : GuiComponent(window), mMenu(win
 		addEntry(_("UNLOCK USER INTERFACE MODE").c_str(), true, [this] { exitKidMode(); }, "iconAdvanced");
 	}
 
+	// AI Graphics
+	addEntry(_("AI GRAPHICS").c_str(), true, [this]{mWindow->pushGui(new GuiAiGraphics(mWindow));}, "iconAdvanced");
 #ifdef WIN32
 	addEntry(_("QUIT"), !Settings::getInstance()->getBool("ShowOnlyExit") || !Settings::getInstance()->getBool("ShowExit"), [this] { openQuitMenu(); }, "iconQuit");
 #else

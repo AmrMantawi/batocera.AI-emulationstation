@@ -23,6 +23,7 @@ set(ES_HEADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpServerThread.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpApi.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/httplib.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/services/LlmStreamService.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/RetroAchievements.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SaveState.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SaveStateRepository.h
@@ -73,7 +74,8 @@ set(ES_HEADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiKeyboardLayout.h	
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiGameAchievements.h		
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiSaveState.h
-	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiFileBrowser.h	
+	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiFileBrowser.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiAiGraphics.h 
 	
     # Scrapers
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scrapers/Scraper.h
@@ -128,6 +130,7 @@ set(ES_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardMapping.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpServerThread.cpp	
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpApi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/services/LlmStreamService.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/RetroAchievements.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SaveState.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SaveStateRepository.cpp
@@ -175,6 +178,7 @@ set(ES_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiGameAchievements.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiSaveState.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiFileBrowser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiAiGraphics.cpp
 
     # Scrapers
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scrapers/Scraper.cpp

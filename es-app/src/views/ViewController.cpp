@@ -5,6 +5,7 @@
 #include "animations/LaunchAnimation.h"
 #include "animations/MoveCameraAnimation.h"
 #include "guis/GuiMenu.h"
+#include "guis/GuiAiGraphics.h"
 #include "views/gamelist/DetailedGameListView.h"
 #include "views/gamelist/IGameListView.h"
 #include "views/gamelist/GridGameListView.h"
@@ -96,31 +97,8 @@ ViewController::~ViewController()
 
 void ViewController::goToStart(bool forceImmediate)
 {
-	bool startOnGamelist = Settings::getInstance()->getBool("StartupOnGameList");
-
-	// If specific system is requested, go directly to the game list
-	auto requestedSystem = Settings::getInstance()->getString("StartupSystem");
-	if (requestedSystem == "lastsystem")
-		requestedSystem = Settings::getInstance()->getString("LastSystem");
-
-	if("" != requestedSystem && "retropie" != requestedSystem)
-	{
-		auto system = SystemData::getSystem(requestedSystem);
-		if (system != nullptr && !system->isGroupChildSystem())
-		{
-			if (startOnGamelist)
-				goToGameList(system, forceImmediate);
-			else
-				goToSystemView(system, forceImmediate);
-
-			return;
-		}
-	}
-
-	if (startOnGamelist)
-		goToGameList(SystemData::getFirstVisibleSystem(), forceImmediate);
-	else
-		goToSystemView(SystemData::getFirstVisibleSystem());
+	// Show custom screen on startup instead of normal system view
+    mWindow->pushGui(new GuiAiGraphics(mWindow));
 }
 
 void ViewController::ReloadAndGoToStart()
@@ -359,7 +337,16 @@ void ViewController::playViewTransition(bool forceImmediate)
 	if(target == -mCamera.translation() && !isAnimationPlaying(0))
 		return;
 
-	std::string transition_style = Settings::TransitionStyle();
+    std::string transition_style = Settings::TransitionStyle();
+
+    // If caller requests an immediate change, cancel animations and snap camera instantly
+    if (forceImmediate)
+    {
+        cancelAnimation(0);
+        this->mCamera.translation() = -target;
+        updateHelpPrompts();
+        return;
+    }
 
 	// check <theme defaultTransition> value
 	if ((transition_style.empty() || transition_style == "auto") && getState().system != nullptr && getState().system->getTheme() != nullptr)

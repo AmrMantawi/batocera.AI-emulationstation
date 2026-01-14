@@ -8,16 +8,7 @@
 #include "SystemConf.h"
 
 #ifndef HAVE_INTL
-const char* ngettext(const char* msgid, const char* msgid_plural, unsigned long int n)
-{
-	if (n != 1)
-		return msgid_plural;
-
-	return msgid;
-}
-const char* pgettext(const char* context, const char* msgid) {
-	return msgid;
-}
+// Fallbacks are provided by gettext.h macros now; no custom functions needed.
 #endif
 
 std::string EsLocale::default_LANGUAGE = "";

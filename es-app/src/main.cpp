@@ -2,6 +2,8 @@
 //http://www.aloshi.com
 
 #include "services/HttpServerThread.h"
+#include "services/HttpApi.h"
+#include "services/LlmStreamService.h"
 #include "guis/GuiDetectDevice.h"
 #include "guis/GuiMsgBox.h"
 #include "utils/FileSystemUtil.h"
@@ -611,6 +613,9 @@ int main(int argc, char* argv[])
 
 	NetworkThread* nthread = new NetworkThread(&window);
 	HttpServerThread httpServer(&window);
+
+	// Start background phoneme reader from shared memory
+	LlmStreamService::get().start("/tts_phoneme_queue", [&window](const std::function<void()>& fn){ window.postToUiThread(fn); });
 
 	// tts
 	TextToSpeech::getInstance()->enable(Settings::getInstance()->getBool("TTS"), false);
