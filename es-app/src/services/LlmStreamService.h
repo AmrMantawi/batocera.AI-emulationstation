@@ -43,7 +43,7 @@ private:
     std::thread mThread;
     std::atomic<bool> mRunning{false};
     std::string mShmPath{"/tts_phoneme_queue"};
-    std::string mControlSocketPath{"/tmp/tts_face_control.sock"};
+    std::string mControlSocketPath{"/run/local-llm.sock"};
     UiPoster mUiPoster;
     
     void* mSharedMem{nullptr};
