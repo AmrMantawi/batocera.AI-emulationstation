@@ -50,3 +50,7 @@ CPackSourceConfig.cmake
 /.vs/
 *.sqlite
 .DS_Store
+
+# Local / generated
+.cache/
+compile_commands.json
