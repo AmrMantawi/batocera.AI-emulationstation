@@ -188,8 +188,8 @@ void LlmStreamService::phonemeReaderThread()
                 *reinterpret_cast<std::uint32_t*>(shm_base + READ_INDEX_OFFSET) = mConsumerReadIndex;
             }
             
-            // Small delay to avoid busy waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // // Small delay to avoid busy waiting
+            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
             
         } catch (const std::exception& e) {
             std::cerr << "[LlmStreamService] Error: " << e.what() << std::endl;

@@ -1,4 +1,4 @@
-#include "guis/GuiAiGraphics.h"
+#include "GuiAiGraphics.h"
 #include "components/ImageComponent.h"
 #include "renderers/Renderer.h"
 #include "ThemeData.h"
