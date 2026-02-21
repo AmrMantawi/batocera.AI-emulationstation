@@ -60,8 +60,8 @@ void LlmStreamService::start(const std::string& shmPath, UiPoster uiPoster)
     }
     
     // Read initial read_index from shared memory
-    std::uint32_t* read_index_ptr = reinterpret_cast<std::uint32_t*>(static_cast<char*>(mSharedMem) + 4);
-    mConsumerReadIndex = *read_index_ptr;
+    auto* queue = static_cast<LlmStreamService::PhonemeSharedQueue*>(mSharedMem);
+    mConsumerReadIndex = queue->header.read_index.load(std::memory_order_relaxed);
     
     mRunning = true;
     mThread = std::thread(&LlmStreamService::phonemeReaderThread, this);
@@ -78,7 +78,7 @@ void LlmStreamService::stop()
         mThread.join();
     
     if (mSharedMem && mSharedMem != MAP_FAILED) {
-        munmap(mSharedMem, 16 + 1024 * 24); // header + 1024 phonemes * 24 bytes
+        munmap(mSharedMem, sizeof(LlmStreamService::PhonemeSharedQueue));
         mSharedMem = nullptr;
     }
     
@@ -106,97 +106,64 @@ void LlmStreamService::unsubscribe(std::uint64_t id)
 void LlmStreamService::phonemeReaderThread()
 {
     if (!mSharedMem) return;
-    
-    // Shared memory layout:
-    // Offset 0: write_index (uint32_t)
-    // Offset 4: read_index (uint32_t)
-    // Offset 8: shutdown (bool)
-    // Offset 16: phoneme data array (1024 * 24 bytes)
-    // Each phoneme: int64_t phoneme_id, float duration, 4 bytes padding, uint64_t timestamp
-    
-    const int WRITE_INDEX_OFFSET = 0;
-    const int READ_INDEX_OFFSET = 4;
-    const int SHUTDOWN_OFFSET = 8;
-    const int HEADER_SIZE = 16;
-    const int PHONEME_DATA_SIZE = 24;
-    const int MAX_PHONEMES = 1024;
-    
-    char* shm_base = static_cast<char*>(mSharedMem);
-    
+
+    auto* queue = static_cast<PhonemeSharedQueue*>(mSharedMem);
+    constexpr size_t MAX_PHONEMES = PhonemeQueueHeader::MAX_PHONEMES;
+
     std::cout << "[LlmStreamService] Phoneme reader thread started" << std::endl;
-    
+
     while (mRunning.load())
     {
         try {
-            // Read header atomics
-            std::uint32_t write_index = *reinterpret_cast<std::uint32_t*>(shm_base + WRITE_INDEX_OFFSET);
-            std::uint32_t read_index = *reinterpret_cast<std::uint32_t*>(shm_base + READ_INDEX_OFFSET);
-            bool shutdown_flag = *reinterpret_cast<bool*>(shm_base + SHUTDOWN_OFFSET);
-            
+            sem_wait(&queue->header.sem);
+
+            std::uint32_t write_index = queue->header.write_index.load(std::memory_order_acquire);
+            bool shutdown_flag = queue->header.shutdown_flag.load(std::memory_order_relaxed);
+
             if (shutdown_flag) {
                 std::cout << "[LlmStreamService] Shutdown signal received" << std::endl;
                 break;
             }
-            
-            // Process all new phonemes
+
             while (mConsumerReadIndex != write_index)
             {
-                // Read phoneme data
-                int offset = HEADER_SIZE + (mConsumerReadIndex * PHONEME_DATA_SIZE);
-                char* phoneme_bytes = shm_base + offset;
-                
-                PhonemeData data;
-                std::memcpy(&data.phoneme_id, phoneme_bytes + 0, 8);
-                std::memcpy(&data.duration_seconds, phoneme_bytes + 8, 4);
-                std::memcpy(&data.timestamp_us, phoneme_bytes + 16, 8);
-                
-                // Validate data
+                const PhonemeData& data = queue->phonemes[mConsumerReadIndex];
+
                 if (data.duration_seconds <= 0 || data.duration_seconds > 10.0f) {
-                    std::cerr << "[LlmStreamService] Skipping phoneme " << data.phoneme_id 
+                    std::cerr << "[LlmStreamService] Skipping phoneme " << data.phoneme_id
                               << " with invalid duration " << data.duration_seconds << "s" << std::endl;
                     mConsumerReadIndex = (mConsumerReadIndex + 1) % MAX_PHONEMES;
-                    
-                    // Update read_index in shared memory
-                    *reinterpret_cast<std::uint32_t*>(shm_base + READ_INDEX_OFFSET) = mConsumerReadIndex;
+                    queue->header.read_index.store(mConsumerReadIndex, std::memory_order_release);
                     continue;
                 }
-                
-                // Notify subscribers on UI thread
+
                 if (mUiPoster)
                 {
                     std::vector<SubRec> subs;
                     {
                         std::lock_guard<std::mutex> lk(mSubsMutex);
-                        subs = mSubscribers; // copy
+                        subs = mSubscribers;
                     }
-                    
                     if (!subs.empty())
                     {
-                        mUiPoster([subs, data]() {
+                        PhonemeData dataCopy = data;
+                        mUiPoster([subs, dataCopy]() {
                             for (auto& r : subs)
-                            {
-                                r.cb(data);
-                            }
+                                r.cb(dataCopy);
                         });
                     }
                 }
-                
-                // Move to next phoneme
+
                 mConsumerReadIndex = (mConsumerReadIndex + 1) % MAX_PHONEMES;
-                
-                // Update read_index in shared memory
-                *reinterpret_cast<std::uint32_t*>(shm_base + READ_INDEX_OFFSET) = mConsumerReadIndex;
+                queue->header.read_index.store(mConsumerReadIndex, std::memory_order_release);
             }
-            
-            // // Small delay to avoid busy waiting
-            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            
+
         } catch (const std::exception& e) {
             std::cerr << "[LlmStreamService] Error: " << e.what() << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
-    
+
     std::cout << "[LlmStreamService] Phoneme reader thread stopped" << std::endl;
 }
 

@@ -4,9 +4,19 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <semaphore.h>
 #include <string>
 #include <thread>
 #include <vector>
+
+// Shared memory queue header (layout must match TTS producer)
+struct PhonemeQueueHeader {
+  std::atomic<std::uint32_t> write_index{0};
+  std::atomic<std::uint32_t> read_index{0};
+  std::atomic<bool> shutdown_flag{false};
+  sem_t sem;
+  static constexpr size_t MAX_PHONEMES = 1024;
+};
 
 class LlmStreamService {
 public:
@@ -17,6 +27,12 @@ public:
     std::int64_t phoneme_id;
     float duration_seconds;
     std::uint64_t timestamp_us;
+  };
+
+  // Shared memory queue for phoneme data
+  struct PhonemeSharedQueue {
+    PhonemeQueueHeader header;
+    PhonemeData phonemes[PhonemeQueueHeader::MAX_PHONEMES];
   };
 
   using Callback = std::function<void(const PhonemeData &)>;
