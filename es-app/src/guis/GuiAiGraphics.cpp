@@ -288,6 +288,7 @@ GuiAiGraphics::~GuiAiGraphics()
 {
     // Stop animation thread
     mAnimationRunning = false;
+    mPhonemeQueueCond.notify_one();
     if (mAnimationThread.joinable())
         mAnimationThread.join();
 
@@ -312,38 +313,32 @@ void GuiAiGraphics::onShow()
         // Start animation thread
         mAnimationRunning = true;
         mAnimationThread = std::thread([this]() {
-            while (mAnimationRunning.load())
+            constexpr double OVERHEAD_COMPENSATION_S = 0.003;
+
+            while (true)
             {
                 PhonemeQueueItem item;
-                bool hasItem = false;
-                
-                // Get next phoneme from queue
                 {
-                    std::lock_guard<std::mutex> lock(mPhonemeQueueMutex);
-                    if (!mPhonemeQueue.empty()) {
-                        item = mPhonemeQueue.front();
-                        mPhonemeQueue.erase(mPhonemeQueue.begin());
-                        hasItem = true;
+                    std::unique_lock<std::mutex> lock(mPhonemeQueueMutex);
+                    mPhonemeQueueCond.wait(lock, [this] {
+                        return !mPhonemeQueue.empty() || !mAnimationRunning.load();
+                    });
+                    if (!mAnimationRunning.load())
+                        break;
+                    item = mPhonemeQueue.front();
+                    mPhonemeQueue.erase(mPhonemeQueue.begin());
+                }
+
+                mWindow->postToUiThread([this, item]() {
+                    if (mBackgroundImage) {
+                        mBackgroundImage->setImage(item.faceImage);
+                        mLastFaceImage = item.faceImage;
                     }
-                }
-                
-                if (hasItem) {
-                    // Update face on UI thread
-                    mWindow->postToUiThread([this, item]() {
-                        if (mBackgroundImage) {
-                            mBackgroundImage->setImage(item.faceImage);
-                            mLastFaceImage = item.faceImage;
-                        }
-                    }, this);
-                    
-                    // Wait for the phoneme duration
-                    std::this_thread::sleep_for(
-                        std::chrono::milliseconds(static_cast<int>(item.duration_seconds * 1000))
-                    );
-                } else {
-                    // No phonemes in queue, sleep briefly
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                }
+                }, this);
+
+                double adjusted = item.duration_seconds - OVERHEAD_COMPENSATION_S;
+                if (adjusted > 0.0)
+                    std::this_thread::sleep_for(std::chrono::duration<double>(adjusted));
             }
         });
         
@@ -366,6 +361,7 @@ void GuiAiGraphics::onShow()
                 {
                     std::lock_guard<std::mutex> lock(mPhonemeQueueMutex);
                     mPhonemeQueue.push_back({data.phoneme_id, data.duration_seconds, faceImage});
+                    mPhonemeQueueCond.notify_one();
                 }
             });
     }
@@ -375,9 +371,10 @@ void GuiAiGraphics::onHide()
 {
     // Stop animation thread
     mAnimationRunning = false;
+    mPhonemeQueueCond.notify_one();
     if (mAnimationThread.joinable())
         mAnimationThread.join();
-    
+
     // Clear phoneme queue
     {
         std::lock_guard<std::mutex> lock(mPhonemeQueueMutex);

@@ -11,6 +11,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 #include <atomic>
 
 class GuiAiGraphics : public GuiComponent
@@ -47,6 +48,7 @@ private:
     };
     std::vector<PhonemeQueueItem> mPhonemeQueue;
     std::mutex mPhonemeQueueMutex;
+    std::condition_variable mPhonemeQueueCond;
     std::thread mAnimationThread;
     std::atomic<bool> mAnimationRunning{false};
 };
