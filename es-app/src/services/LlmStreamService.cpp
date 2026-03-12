@@ -167,6 +167,13 @@ void LlmStreamService::phonemeReaderThread()
     std::cout << "[LlmStreamService] Phoneme reader thread stopped" << std::endl;
 }
 
+std::uint64_t LlmStreamService::getAudioStartTimestamp() const
+{
+    if (!mSharedMem) return 0;
+    auto* queue = static_cast<const PhonemeSharedQueue*>(mSharedMem);
+    return queue->header.audio_start_timestamp_us.load(std::memory_order_acquire);
+}
+
 bool LlmStreamService::sendControlCommand(const std::string& command)
 {
     // Connect to TTS control socket

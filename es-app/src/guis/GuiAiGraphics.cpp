@@ -313,8 +313,6 @@ void GuiAiGraphics::onShow()
         // Start animation thread
         mAnimationRunning = true;
         mAnimationThread = std::thread([this]() {
-            constexpr double OVERHEAD_COMPENSATION_S = 0.003;
-
             while (true)
             {
                 PhonemeQueueItem item;
@@ -329,16 +327,34 @@ void GuiAiGraphics::onShow()
                     mPhonemeQueue.erase(mPhonemeQueue.begin());
                 }
 
+                // Compute the absolute time this phoneme should be shown.
+                // audio_start_timestamp_us is written by local-llm after it queues
+                // audio, and includes the estimated ALSA output buffer latency so
+                // that faces are aligned with when the sound actually reaches the
+                // speaker rather than when synthesis completed.
+                std::uint64_t audio_start = LlmStreamService::get().getAudioStartTimestamp();
+                if (audio_start > 0) {
+                    std::uint64_t target_us = audio_start + item.cumulative_offset_us;
+                    // sleep_until the absolute target time on steady_clock
+                    auto target_tp = std::chrono::steady_clock::time_point(
+                        std::chrono::microseconds(target_us)
+                    );
+                    std::this_thread::sleep_until(target_tp);
+                } else {
+                    // Fallback: audio_start not set yet — sleep for the phoneme
+                    // duration (old behaviour, used if local-llm is an older build)
+                    constexpr double OVERHEAD_S = 0.003;
+                    double adjusted = item.duration_seconds - OVERHEAD_S;
+                    if (adjusted > 0.0)
+                        std::this_thread::sleep_for(std::chrono::duration<double>(adjusted));
+                }
+
                 mWindow->postToUiThread([this, item]() {
                     if (mBackgroundImage) {
                         mBackgroundImage->setImage(item.faceImage);
                         mLastFaceImage = item.faceImage;
                     }
                 }, this);
-
-                double adjusted = item.duration_seconds - OVERHEAD_COMPENSATION_S;
-                if (adjusted > 0.0)
-                    std::this_thread::sleep_for(std::chrono::duration<double>(adjusted));
             }
         });
         
@@ -360,7 +376,8 @@ void GuiAiGraphics::onShow()
                 const char* faceImage = mapPhonemeIdToFace(data.phoneme_id);
                 {
                     std::lock_guard<std::mutex> lock(mPhonemeQueueMutex);
-                    mPhonemeQueue.push_back({data.phoneme_id, data.duration_seconds, faceImage});
+                    mPhonemeQueue.push_back({data.phoneme_id, data.duration_seconds,
+                                            faceImage, data.timestamp_us});
                     mPhonemeQueueCond.notify_one();
                 }
             });

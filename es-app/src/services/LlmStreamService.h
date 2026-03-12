@@ -9,12 +9,16 @@
 #include <thread>
 #include <vector>
 
-// Shared memory queue header (layout must match TTS producer)
+// Shared memory queue header (layout must match TTS producer in async_processors.h)
 struct PhonemeQueueHeader {
   std::atomic<std::uint32_t> write_index{0};
   std::atomic<std::uint32_t> read_index{0};
   std::atomic<bool> shutdown_flag{false};
   sem_t sem;
+  // Absolute steady_clock timestamp (µs) when audio will first reach the speaker
+  // for the current utterance. Zero while not yet set. Add PhonemeData::timestamp_us
+  // to get the absolute target display time for each phoneme.
+  std::atomic<std::uint64_t> audio_start_timestamp_us{0};
   static constexpr size_t MAX_PHONEMES = 1024;
 };
 
@@ -26,6 +30,8 @@ public:
   struct PhonemeData {
     std::int64_t phoneme_id;
     float duration_seconds;
+    // Cumulative display offset (µs from utterance start). Target display time =
+    // PhonemeQueueHeader::audio_start_timestamp_us + timestamp_us.
     std::uint64_t timestamp_us;
   };
 
@@ -45,6 +51,10 @@ public:
   // Subscribe to phoneme events; returns subscription id
   std::uint64_t subscribe(Callback cb);
   void unsubscribe(std::uint64_t id);
+
+  // Returns the audio_start_timestamp_us from shared memory (0 if unavailable).
+  // Use with PhonemeData::timestamp_us to compute absolute target display times.
+  std::uint64_t getAudioStartTimestamp() const;
 
   // Send control commands to TTS server
   bool sendControlCommand(const std::string &command);

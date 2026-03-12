@@ -45,6 +45,10 @@ private:
         std::int64_t phoneme_id;
         float duration_seconds;
         std::string faceImage;
+        // Cumulative display offset (µs from utterance start) — mirrors
+        // PhonemeData::timestamp_us. Used with audio_start_timestamp_us for
+        // absolute-time sync instead of sleep_for(duration).
+        std::uint64_t cumulative_offset_us{0};
     };
     std::vector<PhonemeQueueItem> mPhonemeQueue;
     std::mutex mPhonemeQueueMutex;
