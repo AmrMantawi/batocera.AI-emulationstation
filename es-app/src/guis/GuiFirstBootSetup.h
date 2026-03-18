@@ -22,7 +22,7 @@ public:
 
 private:
     void showStepName();
-    void showStepWifi();
+    void showStepWifi(const std::string& error = "");
     void showStepModels();
     void finalize();
 };

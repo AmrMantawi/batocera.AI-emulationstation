@@ -5,8 +5,10 @@
 #include "guis/GuiMsgBox.h"
 #include "guis/GuiLoading.h"
 #include "guis/GuiAiGraphics.h"
+#include "components/TextComponent.h"
 #include "SystemConf.h"
 #include "ApiSystem.h"
+#include "ThemeData.h"
 #include "Window.h"
 #include "LocaleES.h"
 #include "Log.h"
@@ -42,12 +44,13 @@ void GuiFirstBootSetup::showStepName()
 // ---------------------------------------------------------------------------
 // Step 2 – WiFi setup
 // ---------------------------------------------------------------------------
-void GuiFirstBootSetup::showStepWifi()
+void GuiFirstBootSetup::showStepWifi(const std::string& error)
 {
     const std::string baseSSID = SystemConf::getInstance()->get("wifi.ssid");
     const std::string baseKEY  = SystemConf::getInstance()->get("wifi.key");
 
-    // "NEXT" advances; "BACK" just closes this screen without advancing.
+    // "NEXT" attempts to connect and advances on success, or re-shows this
+    // screen with an inline error message on failure.
     auto* s = new GuiSettings(mWindow, _("NETWORK SETUP"), _("NEXT"),
         [this, baseSSID, baseKEY](GuiSettings* gui)
         {
@@ -65,11 +68,9 @@ void GuiFirstBootSetup::showStepWifi()
                 bool ok = ApiSystem::getInstance()->enableWifi(newSSID, newKEY);
                 if (!ok)
                 {
-                    mWindow->pushGui(new GuiMsgBox(mWindow,
-                        _("Could not connect to WiFi.\nCheck your password and try again.\n\nYou can configure WiFi later from Network Settings."),
-                        _("CONTINUE"), [this]() { showStepModels(); }));
-                    gui->setSave(false);
+                    // Re-show this screen with an inline error instead of a popup.
                     gui->close();
+                    showStepWifi(_("Could not connect. Check your password and try again."));
                     return;
                 }
             }
@@ -80,7 +81,18 @@ void GuiFirstBootSetup::showStepWifi()
 
     s->setSubTitle(_("Connect to WiFi to enable AI features and model downloads."));
 
-    // SSID row – tapping opens GuiWifi (network list), matching the main settings pattern.
+    // Inline error message shown when a previous connection attempt failed.
+    if (!error.empty())
+    {
+        auto theme = ThemeData::getMenuTheme();
+        ComponentListRow row;
+        auto errorText = std::make_shared<TextComponent>(
+            mWindow, error, theme->Text.font, 0xFF0000FF, ALIGN_CENTER);
+        row.addElement(errorText, true);
+        s->addRow(row);
+    }
+
+    // SSID row – tapping opens GuiWifi (network list), matching main settings.
     auto openWifi = [](Window* win, std::string title, std::string data,
                        const std::function<void(std::string)>& onsave)
     {
@@ -88,8 +100,16 @@ void GuiFirstBootSetup::showStepWifi()
     };
     s->addInputTextRow(_("WIFI SSID"), "wifi.ssid", /*password=*/false, /*storeInSettings=*/false, openWifi);
 
-    // Password row – opens on-screen keyboard / text popup.
+    // Password row – opens on-screen keyboard / text popup with masking.
     s->addInputTextRow(_("WIFI KEY"), "wifi.key", /*password=*/true);
+
+    // SKIP button – advances without attempting to connect.
+    s->getMenu().addButton(_("SKIP"), "skip wifi setup", [this, s]()
+    {
+        s->setSave(false);
+        showStepModels();
+        s->close();
+    });
 
     mWindow->pushGui(s);
 }
