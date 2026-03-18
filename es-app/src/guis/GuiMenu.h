@@ -49,6 +49,7 @@ private:
         void openScraperSettings();
         void openScreensaverOptions();  
         void openSoundSettings();
+        void openAISettings();
         void openUISettings();
         void openUpdatesSettings();
         

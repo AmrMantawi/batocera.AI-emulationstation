@@ -60,6 +60,7 @@
 #include "TextToSpeech.h"
 #include "Paths.h"
 #include "guis/GuiAiGraphics.h"
+#include <sys/wait.h>
 
 #if WIN32
 #include "Win32ApiSystem.h"
@@ -206,8 +207,8 @@ GuiMenu::GuiMenu(Window *window, bool animate) : GuiComponent(window), mMenu(win
 		addEntry(_("UNLOCK USER INTERFACE MODE").c_str(), true, [this] { exitKidMode(); }, "iconAdvanced");
 	}
 
-	// AI Graphics
-	addEntry(_("AI GRAPHICS").c_str(), true, [this]{mWindow->pushGui(new GuiAiGraphics(mWindow));}, "iconAdvanced");
+	// AI Settings
+	addEntry(_("AI SETTINGS").c_str(), true, [this]{ openAISettings(); }, "iconAdvanced");
 #ifdef WIN32
 	addEntry(_("QUIT"), !Settings::getInstance()->getBool("ShowOnlyExit") || !Settings::getInstance()->getBool("ShowExit"), [this] { openQuitMenu(); }, "iconQuit");
 #else
@@ -3903,6 +3904,72 @@ void GuiMenu::openUISettings()
 			delete pthis;
 			window->pushGui(new GuiMenu(window));
 		}
+	});
+
+	mWindow->pushGui(s);
+}
+
+void GuiMenu::openAISettings()
+{
+	auto s = new GuiSettings(mWindow, _("AI SETTINGS").c_str());
+
+	s->addGroup(_("AI GRAPHICS"));
+	s->addEntry(_("SHOW AI GRAPHICS"), true, [this] {
+		mWindow->pushGui(new GuiAiGraphics(mWindow));
+	});
+
+	s->addGroup(_("AI MODELS"));
+	s->addEntry(_("INSTALL AI MODELS"), true, [this] {
+		mWindow->pushGui(new GuiMsgBox(mWindow,
+			_("Would you like to download the AI model files now?\n\nThis requires an internet connection and approximately 5 GB of free disk space."),
+			_("YES"), [this]()
+			{
+				mWindow->pushGui(new GuiLoading<std::string>(mWindow,
+					_("DOWNLOADING AI MODELS — THIS MAY TAKE A WHILE..."),
+					[](IGuiLoadingHandler* handler) -> std::string
+					{
+						LOG(LogInfo) << "GuiMenu: running local-llm-setup-models";
+						handler->setText(_("Downloading AI models, please wait..."));
+
+						FILE* pipe = popen("/usr/bin/local-llm-setup-models 2>&1", "r");
+						if (pipe == nullptr)
+							return _("Failed to start download process.");
+
+						std::string lastLine;
+						char line[1024];
+						while (fgets(line, sizeof(line), pipe))
+						{
+							std::string s(line);
+							if (!s.empty() && s.back() == '\n') s.pop_back();
+							if (!s.empty()) { lastLine = s; handler->setText(s); }
+						}
+
+						int exitCode = WEXITSTATUS(pclose(pipe));
+						if (exitCode != 0)
+						{
+							LOG(LogWarning) << "GuiMenu: local-llm-setup-models exited with code " << exitCode;
+							return lastLine.empty() ? _("Download failed (unknown error).") : lastLine;
+						}
+						return std::string();
+					},
+					[this](const std::string& error)
+					{
+						if (!error.empty())
+						{
+							mWindow->pushGui(new GuiMsgBox(mWindow,
+								_("Model download failed:") + "\n\n" + error,
+								_("OK"), nullptr));
+						}
+						else
+						{
+							mWindow->pushGui(new GuiMsgBox(mWindow,
+								_("AI models installed successfully."),
+								_("OK"), nullptr));
+						}
+					}));
+			},
+			_("CANCEL"), nullptr,
+			ICON_QUESTION));
 	});
 
 	mWindow->pushGui(s);
