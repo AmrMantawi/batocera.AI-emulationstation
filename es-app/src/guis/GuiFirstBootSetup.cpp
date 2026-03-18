@@ -14,7 +14,6 @@
 GuiFirstBootSetup::GuiFirstBootSetup(Window* window)
     : GuiComponent(window)
 {
-    // This component is invisible – it only orchestrates the wizard screens.
     setSize(0, 0);
     showStepName();
 }
@@ -24,22 +23,18 @@ GuiFirstBootSetup::GuiFirstBootSetup(Window* window)
 // ---------------------------------------------------------------------------
 void GuiFirstBootSetup::showStepName()
 {
-    auto* s = new GuiSettings(mWindow, _("WELCOME TO BATOCERA AI"));
-    s->setSubTitle(_("Let's get you set up. Enter your name to get started."));
+    // "NEXT" advances; "BACK" just closes this screen without advancing.
+    auto* s = new GuiSettings(mWindow, _("WELCOME TO BATOCERA AI"), _("NEXT"),
+        [this](GuiSettings* gui)
+        {
+            gui->save();            // runs addInputTextRow save funcs + saveSystemConf
+            gui->setSave(false);    // prevent double-save on close
+            showStepWifi();
+            gui->close();
+        });
 
+    s->setSubTitle(_("Enter your name to personalize your experience."));
     s->addInputTextRow(_("Your Name"), "system.username", /*password=*/false, /*storeInSettings=*/false);
-
-    s->addSaveFunc([s]()
-    {
-        // addInputTextRow already queued the write to SystemConf via its own
-        // save function, so we just need the conf to persist.
-        SystemConf::getInstance()->saveSystemConf();
-    });
-
-    s->onFinalize([this]()
-    {
-        showStepWifi();
-    });
 
     mWindow->pushGui(s);
 }
@@ -49,50 +44,31 @@ void GuiFirstBootSetup::showStepName()
 // ---------------------------------------------------------------------------
 void GuiFirstBootSetup::showStepWifi()
 {
-    // "NEXT" button advances the wizard; "SKIP" also advances (WiFi is optional).
-    auto advance = [this]() { showStepModels(); };
-
+    // "NEXT" advances; "BACK" just closes this screen without advancing.
     auto* s = new GuiSettings(mWindow, _("NETWORK SETUP"), _("NEXT"),
-        [advance](GuiSettings* gui)
+        [this](GuiSettings* gui)
         {
-            gui->save();
-            advance();
-            // GuiSettings::close() would call onFinalize then delete, but we
-            // called save() manually and will delete via close() below.
             gui->setSave(false);
+            showStepModels();
             gui->close();
         });
 
     s->setSubTitle(_("Connect to WiFi to enable AI features and model downloads."));
 
-    // Current SSID for display
-    std::string currentSsid = SystemConf::getInstance()->get("wifi.ssid");
-    if (currentSsid.empty())
-        currentSsid = _("Not configured");
-
-    s->addEntry(_("SELECT WIFI NETWORK"), /*arrow=*/true, [this, s]()
+    s->addEntry(_("SELECT WIFI NETWORK"), /*arrow=*/true, [this]()
     {
         std::string ssid = SystemConf::getInstance()->get("wifi.ssid");
         mWindow->pushGui(new GuiWifi(mWindow, _("SELECT WIFI NETWORK"), ssid,
             [](const std::string& selectedSsid)
             {
-                // GuiWifi shows a password prompt internally when needed;
-                // saving is handled by openNetworkSettings pattern – here we
-                // just store the chosen SSID and let the user confirm via the
-                // existing wifi.key flow.  For simplicity we enable wifi with
-                // whatever credentials are already saved.
                 SystemConf::getInstance()->set("wifi.ssid", selectedSsid);
                 SystemConf::getInstance()->set("wifi.enabled", "1");
                 SystemConf::getInstance()->saveSystemConf();
                 ApiSystem::getInstance()->enableWifi(
-                    SystemConf::getInstance()->get("wifi.ssid"),
+                    selectedSsid,
                     SystemConf::getInstance()->get("wifi.key"));
             }));
     });
-
-    // SKIP button – advances without saving anything wifi-related
-    s->setCloseButton("start"); // allow START to close
-    s->onFinalize([advance]() { advance(); });
 
     mWindow->pushGui(s);
 }
@@ -148,7 +124,5 @@ void GuiFirstBootSetup::finalize()
     LOG(LogInfo) << "GuiFirstBootSetup: setup complete, launching GuiAiGraphics";
 
     mWindow->pushGui(new GuiAiGraphics(mWindow));
-
-    // Remove this invisible orchestrator from the stack.
     delete this;
 }
