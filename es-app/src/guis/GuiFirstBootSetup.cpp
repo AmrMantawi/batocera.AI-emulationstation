@@ -60,7 +60,14 @@ void GuiFirstBootSetup::showStepWifi(const std::string& error)
             std::string newSSID = SystemConf::getInstance()->get("wifi.ssid");
             std::string newKEY  = SystemConf::getInstance()->get("wifi.key");
 
-            if (!newSSID.empty() && (newSSID != baseSSID || newKEY != baseKEY))
+            if (newSSID.empty())
+            {
+                gui->close();
+                showStepWifi(_("Please select a WiFi network to continue."));
+                return;
+            }
+
+            if (newSSID != baseSSID || newKEY != baseKEY)
             {
                 SystemConf::getInstance()->set("wifi.enabled", "1");
                 SystemConf::getInstance()->saveSystemConf();
@@ -103,12 +110,12 @@ void GuiFirstBootSetup::showStepWifi(const std::string& error)
     // Password row – opens on-screen keyboard / text popup with masking.
     s->addInputTextRow(_("WIFI KEY"), "wifi.key", /*password=*/true);
 
-    // SKIP button – advances without attempting to connect.
+    // SKIP button – skips WiFi and model download, goes straight to finish.
     s->getMenu().addButton(_("SKIP"), "skip wifi setup", [this, s]()
     {
         s->setSave(false);
-        showStepModels();
         s->close();
+        finalize();
     });
 
     mWindow->pushGui(s);
