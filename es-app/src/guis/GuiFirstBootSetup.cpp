@@ -1,5 +1,7 @@
 #include "guis/GuiFirstBootSetup.h"
 
+#include <sys/wait.h>
+
 #include "guis/GuiSettings.h"
 #include "guis/GuiWifi.h"
 #include "guis/GuiMsgBox.h"
@@ -132,23 +134,50 @@ void GuiFirstBootSetup::showStepModels()
         _("Would you like to download the AI model files now?\n\nThis requires an internet connection and approximately 5 GB of free disk space."),
         _("YES"), [this, window]()
         {
-            window->pushGui(new GuiLoading<bool>(window,
+            // Use std::string as result: empty = success, non-empty = error message.
+            window->pushGui(new GuiLoading<std::string>(window,
                 _("DOWNLOADING AI MODELS — THIS MAY TAKE A WHILE..."),
-                [](IGuiLoadingHandler* handler) -> bool
+                [](IGuiLoadingHandler* handler) -> std::string
                 {
                     LOG(LogInfo) << "GuiFirstBootSetup: running local-llm-setup-models";
                     handler->setText(_("Downloading AI models, please wait..."));
-                    int ret = system("/usr/bin/local-llm-setup-models");
-                    if (ret != 0)
-                        LOG(LogWarning) << "GuiFirstBootSetup: local-llm-setup-models exited with code " << ret;
-                    return (ret == 0);
+
+                    FILE* pipe = popen("/usr/bin/local-llm-setup-models 2>&1", "r");
+                    if (pipe == nullptr)
+                        return _("Failed to start download process.");
+
+                    std::string lastLine;
+                    char line[1024];
+                    while (fgets(line, sizeof(line), pipe))
+                    {
+                        // Strip trailing newline and keep updating the progress text.
+                        std::string s(line);
+                        if (!s.empty() && s.back() == '\n')
+                            s.pop_back();
+                        if (!s.empty())
+                        {
+                            lastLine = s;
+                            handler->setText(s);
+                        }
+                    }
+
+                    int exitCode = WEXITSTATUS(pclose(pipe));
+                    if (exitCode != 0)
+                    {
+                        LOG(LogWarning) << "GuiFirstBootSetup: local-llm-setup-models exited with code " << exitCode;
+                        return lastLine.empty()
+                            ? _("Download failed (unknown error).")
+                            : lastLine;
+                    }
+                    return std::string(); // success
                 },
-                [this, window](bool success)
+                [this, window](const std::string& error)
                 {
-                    if (!success)
+                    if (!error.empty())
                     {
                         window->pushGui(new GuiMsgBox(window,
-                            _("Model download encountered an error.\nYou can retry later from the main menu."),
+                            _("Model download failed:") + "\n\n" + error +
+                            "\n\n" + _("You can retry later from the main menu."),
                             _("OK"), [this]() { finalize(); }));
                     }
                     else
