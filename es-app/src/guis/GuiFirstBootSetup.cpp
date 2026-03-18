@@ -44,31 +44,42 @@ void GuiFirstBootSetup::showStepName()
 // ---------------------------------------------------------------------------
 void GuiFirstBootSetup::showStepWifi()
 {
+    const std::string baseSSID = SystemConf::getInstance()->get("wifi.ssid");
+    const std::string baseKEY  = SystemConf::getInstance()->get("wifi.key");
+
     // "NEXT" advances; "BACK" just closes this screen without advancing.
     auto* s = new GuiSettings(mWindow, _("NETWORK SETUP"), _("NEXT"),
-        [this](GuiSettings* gui)
+        [this, baseSSID, baseKEY](GuiSettings* gui)
         {
+            gui->save();            // writes wifi.ssid / wifi.key to SystemConf
             gui->setSave(false);
+
+            std::string newSSID = SystemConf::getInstance()->get("wifi.ssid");
+            std::string newKEY  = SystemConf::getInstance()->get("wifi.key");
+
+            if (!newSSID.empty() && (newSSID != baseSSID || newKEY != baseKEY))
+            {
+                SystemConf::getInstance()->set("wifi.enabled", "1");
+                SystemConf::getInstance()->saveSystemConf();
+                ApiSystem::getInstance()->enableWifi(newSSID, newKEY);
+            }
+
             showStepModels();
             gui->close();
         });
 
     s->setSubTitle(_("Connect to WiFi to enable AI features and model downloads."));
 
-    s->addEntry(_("SELECT WIFI NETWORK"), /*arrow=*/true, [this]()
+    // SSID row – tapping opens GuiWifi (network list), matching the main settings pattern.
+    auto openWifi = [](Window* win, std::string title, std::string data,
+                       const std::function<void(std::string)>& onsave)
     {
-        std::string ssid = SystemConf::getInstance()->get("wifi.ssid");
-        mWindow->pushGui(new GuiWifi(mWindow, _("SELECT WIFI NETWORK"), ssid,
-            [](const std::string& selectedSsid)
-            {
-                SystemConf::getInstance()->set("wifi.ssid", selectedSsid);
-                SystemConf::getInstance()->set("wifi.enabled", "1");
-                SystemConf::getInstance()->saveSystemConf();
-                ApiSystem::getInstance()->enableWifi(
-                    selectedSsid,
-                    SystemConf::getInstance()->get("wifi.key"));
-            }));
-    });
+        win->pushGui(new GuiWifi(win, title, data, onsave));
+    };
+    s->addInputTextRow(_("WIFI SSID"), "wifi.ssid", /*password=*/false, /*storeInSettings=*/false, openWifi);
+
+    // Password row – opens on-screen keyboard / text popup.
+    s->addInputTextRow(_("WIFI KEY"), "wifi.key", /*password=*/true);
 
     mWindow->pushGui(s);
 }
