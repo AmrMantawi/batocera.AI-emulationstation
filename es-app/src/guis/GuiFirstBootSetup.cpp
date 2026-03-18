@@ -61,7 +61,17 @@ void GuiFirstBootSetup::showStepWifi()
             {
                 SystemConf::getInstance()->set("wifi.enabled", "1");
                 SystemConf::getInstance()->saveSystemConf();
-                ApiSystem::getInstance()->enableWifi(newSSID, newKEY);
+
+                bool ok = ApiSystem::getInstance()->enableWifi(newSSID, newKEY);
+                if (!ok)
+                {
+                    mWindow->pushGui(new GuiMsgBox(mWindow,
+                        _("Could not connect to WiFi.\nCheck your password and try again.\n\nYou can configure WiFi later from Network Settings."),
+                        _("CONTINUE"), [this]() { showStepModels(); }));
+                    gui->setSave(false);
+                    gui->close();
+                    return;
+                }
             }
 
             showStepModels();
