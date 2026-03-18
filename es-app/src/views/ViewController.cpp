@@ -6,6 +6,7 @@
 #include "animations/MoveCameraAnimation.h"
 #include "guis/GuiMenu.h"
 #include "guis/GuiAiGraphics.h"
+#include "guis/GuiFirstBootSetup.h"
 #include "views/gamelist/DetailedGameListView.h"
 #include "views/gamelist/IGameListView.h"
 #include "views/gamelist/GridGameListView.h"
@@ -97,8 +98,10 @@ ViewController::~ViewController()
 
 void ViewController::goToStart(bool forceImmediate)
 {
-	// Show custom screen on startup instead of normal system view
-    mWindow->pushGui(new GuiAiGraphics(mWindow));
+	if (SystemConf::getInstance()->get("system.firstboot") != "done")
+		mWindow->pushGui(new GuiFirstBootSetup(mWindow));
+	else
+		mWindow->pushGui(new GuiAiGraphics(mWindow));
 }
 
 void ViewController::ReloadAndGoToStart()
